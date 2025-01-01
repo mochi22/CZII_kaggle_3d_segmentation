@@ -1,0 +1,7 @@
+input_dir: ${work_dir}/input
+output_dir: ${work_dir}/output
+exp_dir: ${work_dir}/output/experiments
+# kaggle_key: ${oc.decode:${oc.env:KAGGLE_KEY}}
+# kaggle_username: ${oc.decode:${oc.env:KAGGLE_USERNAME}}
+TRAIN_DATA_DIR: ${work_dir}/input/czii-only-kaggle-data-npy
+TEST_DATA_DIR: ${work_dir}/input/czii-cryo-et-object-identification

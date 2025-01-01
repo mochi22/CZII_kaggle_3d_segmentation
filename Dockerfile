@@ -7,7 +7,11 @@ FROM gcr.io/kaggle-gpu-images/python:v155
 RUN python3 -m pip install --upgrade pip \
     &&  pip install --no-cache-dir \
     black isort \ 
-    jupyterlab_code_formatter 
+    jupyterlab_code_formatter \
+    lightning \
+    monai \
+    copick \
+    connected-components-3d
 
 # using hydra and mlflow for managin experiments
 RUN pip install --no-cache-dir \

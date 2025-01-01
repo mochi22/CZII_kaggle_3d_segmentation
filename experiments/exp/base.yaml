@@ -1,0 +1,32 @@
+seed: 7
+
+SUB_DIMENTION: 16 # 32 # 64 # 96
+STRIDE: 8  # 32
+NUM_SLICE: 16  # 64
+NUM_WORKERS: 4
+BATCH_SIZE: 1
+PRETRAIN: True
+
+model:
+  n_channels: 1
+  n_classes: 7
+  lr: 1e-3
+  arch: 'resnet34d'
+
+trainer:
+  max_epochs: 100
+  log_every_n_steps: 10
+  val_check_interval: 1.0
+  gpus: 4
+  accumulate_grad_batches: 1
+  precision: 16
+  gradient_clip_val: 1.0
+  patience: 10
+  strategy: "ddp" # or "ddp_spawn"
+
+# list の書き方
+# my_struct:
+#   list_field: 
+#     - item1
+#     - item2
+#     - item3

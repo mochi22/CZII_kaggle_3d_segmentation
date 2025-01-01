@@ -7,6 +7,7 @@ services:
       - ./.cache:/root/.cache
     working_dir: /kaggle/working
     environment:
+      - NVIDIA_VISIBLE_DEVICES=all
       - JUPYTERLAB_SETTINGS_DIR=/kaggle/working/.jupyter-settings # jupyterの設定(保存用)
     ports:
       - 8889:8889
@@ -16,9 +17,9 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              # count: 1
+              count: all
               capabilities: [ gpu ]
-    shm_size: '8gb'
+    shm_size: '64gb'
 
   # mlflow:
   #   build: .
