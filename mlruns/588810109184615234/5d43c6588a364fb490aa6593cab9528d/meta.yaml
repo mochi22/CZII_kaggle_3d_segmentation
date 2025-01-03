@@ -1,0 +1,15 @@
+artifact_uri: file:///kaggle/working/mlruns/588810109184615234/5d43c6588a364fb490aa6593cab9528d/artifacts
+end_time: 1735868667350
+entry_point_name: ''
+experiment_id: '588810109184615234'
+lifecycle_stage: active
+run_id: 5d43c6588a364fb490aa6593cab9528d
+run_name: casual-donkey-664
+run_uuid: 5d43c6588a364fb490aa6593cab9528d
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1735868661472
+status: 4
+tags: []
+user_id: root

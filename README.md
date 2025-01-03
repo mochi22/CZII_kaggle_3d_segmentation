@@ -7,6 +7,9 @@ this is kaggle competition CZII. task is 3d segmentation with micro proteins
 ```sh
 docker compose build
 
+# build without cache
+docker compose build --no-cache
+
 # using bash
 docker compose run --rm kaggle bash 
 

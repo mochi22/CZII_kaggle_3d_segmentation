@@ -4,6 +4,8 @@ import time
 import hydra
 import numpy as np
 import torch
+import warnings
+import mlflow
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import MLFlowLogger
@@ -14,8 +16,9 @@ from omegaconf import DictConfig, OmegaConf
 from utilities.seed import set_seed
 from utilities.logger import get_logger
 from src.dataloader import create_dataloader
-from src.model import model2d1d
+from src.model import model2d1d, model25d
 
+warnings.filterwarnings('ignore')
 
 def loading_npy(cfg, names):
     files = []
@@ -40,7 +43,6 @@ def save_cfg(cfg, exp_name):
         f.write(OmegaConf.to_yaml(cfg))
     
     print("seve cfg done. save path:", config_path)
-
 
 
 @hydra.main(version_base=None, config_path=".", config_name="config.yaml")
@@ -72,9 +74,13 @@ def main(cfg: DictConfig) -> None:
     train_loader = create_dataloader(cfg, train_files)
     valid_loader = create_dataloader(cfg, valid_files, shuffle=False)
 
+    # data2=next(iter(train_loader))
+    # print("++"*10)
+    # print(data2["image"].shape, data2["label"].shape)
+
     # modeling
-    # model = model25d(n_channels=1, n_classes=7)
-    model = model2d1d(
+    # model = model2d1d(
+    model = model25d(
         n_channels=cfg.exp.model.n_channels, 
         n_classes=cfg.exp.model.n_classes,
         lr=cfg.exp.model.lr,
@@ -87,53 +93,60 @@ def main(cfg: DictConfig) -> None:
     # Check if CUDA is available and then count the GPUs
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
-        print(f"Number of GPUs available: {num_gpus}")
+        print(f"Number of GPUs available: {num_gpus}, current GPU:{torch.cuda.current_device()}")
         devices = list(range(num_gpus))
         print(devices)
     else:
         print("No GPU available. Running on CPU.", torch.cuda.is_available())
         main_logger.error("This is no GPU!!!")
-    
-
 
     # setting MLflow logging
     mlf_logger = MLFlowLogger(
-        experiment_name=cfg.logger.mlflow.experiment_name,
-        tracking_uri=cfg.logger.mlflow.tracking_uri
+        experiment_name=cfg.exp.logger.mlflow.experiment_name,
+        tracking_uri=cfg.exp.logger.mlflow.tracking_uri,
+        run_name=cfg.exp.logger.mlflow.run_name
     )
     mlf_logger.log_hyperparams(cfg)
 
+    # mlflow.start_run(run)
+    mlflow.pytorch.autolog()
+    mlflow.set_experiment(cfg.exp.logger.mlflow.experiment_name)
+
 
     # setting callbacks
-    callbacks = [
-        ModelCheckpoint(
-            dirpath=Path(cfg.dir.exp_dir) / 'checkpoints',
-            filename='{epoch:02d}-{val_loss:.2f}',
-            save_top_k=3,
-            monitor='val_loss',
-            mode='min'
-        ),
-        EarlyStopping(
-            monitor='val_loss',
-            patience=cfg.exp.trainer.patience,
-            mode='min'
-        ),
-        LearningRateMonitor(logging_interval='step')
-    ]
-
+    if cfg.exp.USE_CALLBACK is not None:
+        callbacks = [
+            ModelCheckpoint(
+                dirpath=Path(cfg.dir.exp_dir) / 'checkpoints',
+                filename='{epoch:02d}-{val_loss:.2f}',
+                save_top_k=3,
+                monitor='val_loss',
+                mode='min'
+            ),
+            EarlyStopping(
+                monitor='val_loss',
+                patience=cfg.exp.trainer.patience,
+                mode='min'
+            ),
+            LearningRateMonitor(logging_interval='step')
+        ]
+    else:
+        callbacks=[]
+    
+    # https://lightning.ai/docs/pytorch/stable/common/trainer.html
     trainer = pl.Trainer(
         accelerator="gpu",
         max_epochs=cfg.exp.trainer.max_epochs,
         logger=mlf_logger,
-        callbacks=callbacks,
+        callbacks=callbacks, # this makes any errors. https://github.com/huggingface/transformers/issues/3887
         log_every_n_steps=cfg.exp.trainer.log_every_n_steps,
-        val_check_interval=cfg.exp.trainer.val_check_interval,
-        gpus=cfg.exp.trainer.gpus,
+        # val_check_interval=cfg.exp.trainer.val_check_interval,
+        devices=cfg.exp.trainer.gpus,
         strategy=cfg.exp.trainer.strategy,
-        accumulate_grad_batches=cfg.exp.trainer.accumulate_grad_batches,
-        precision=cfg.exp.trainer.precision,
-        gradient_clip_val=cfg.exp.trainer.gradient_clip_val,
-        deterministic=True,
+        # accumulate_grad_batches=cfg.exp.trainer.accumulate_grad_batches,
+        # precision=cfg.exp.trainer.precision,
+        # gradient_clip_val=cfg.exp.trainer.gradient_clip_val,
+        # deterministic=True, # if True, this may be override to `torch.use_deterministic_algorithms(True)`. However `torch.use_deterministic_algorithms(True, warn_only=True)` is expected
     )
 
     # Train

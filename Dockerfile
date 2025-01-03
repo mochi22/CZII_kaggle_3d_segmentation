@@ -18,6 +18,9 @@ RUN pip install --no-cache-dir \
     hydra-core \
     mlflow
 
+# permit user for mlflow logging data
+RUN mkdir -p /kaggle/working/mlruns && chmod -R 755 /kaggle/working/mlruns
+
 # # Copy the code into the container
 # COPY . /app
 # WORKDIR /app

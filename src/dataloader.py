@@ -8,17 +8,20 @@ from monai.transforms import (
     RandRotate90d, 
     NormalizeIntensityd,
     RandCropByLabelClassesd,
-    Resized
+    Resized,
+    ToTensord
 )
 from .dataset import SlicedVolumeDataset
 
 def create_dataloader(cfg, data_files, shuffle=True):
     transform = Compose([
-        # AddChanneld(keys=["image", "label"]),
-        # ScaleIntensityd(keys="image"),
-        # Resized(keys=["image", "label"], spatial_size=(BATCH_SIZE, NUM_SLICE, 64, 64)),  # サイズを調整
+        Resized(
+            keys=["image", "label"],
+            spatial_size=(cfg.exp.IMAGE_SIZE, cfg.exp.IMAGE_SIZE),  #(cfg.exp.NUM_SLICE, cfg.exp.IMAGE_SIZE, cfg.exp.IMAGE_SIZE),
+            mode=("trilinear", "nearest")  # 画像は三線形補間、ラベルは最近傍補間
+        ),
         NormalizeIntensityd(keys="image"),
-        Orientationd(keys=["image", "label"], axcodes="RAS"), #画像とラベルの向きを "RAS" (Right-Anterior-Superior) 方向に統一
+        # ToTensord(keys=["image"]),
     ])
 
     # dataset

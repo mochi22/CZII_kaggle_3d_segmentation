@@ -21,10 +21,10 @@ services:
               capabilities: [ gpu ]
     shm_size: '64gb'
 
-  # mlflow:
-  #   build: .
-  #   ports:
-  #     - "5000:5000"
-  #   volumes:
-  #     - ./mlruns:/app/mlruns
-  #   command: mlflow server --host 0.0.0.0 --port 5000
+  mlflow:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+    command: mlflow server --host 0.0.0.0 --port 5000

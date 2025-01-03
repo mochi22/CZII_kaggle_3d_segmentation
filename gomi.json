@@ -1,0 +1,5 @@
+encode_0 torch.Size([1, 64, 32, 315, 315])
+encode_1 torch.Size([1, 64, 16, 157, 157])
+encode_2 torch.Size([1, 128, 8, 79, 79])
+encode_3 torch.Size([1, 256, 4, 40, 40])
+encode_4 torch.Size([1, 512, 4, 20, 20])

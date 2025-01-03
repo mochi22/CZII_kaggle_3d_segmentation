@@ -1,0 +1,16 @@
+defaults:
+  - base@_here_ # ベースの設定ファイルを指定する
+
+seed: 634
+
+logger:
+  mlflow:
+    # _override_: ${oc.load:logger/mlflow.yaml} # うまくいかない
+    experiment_name: baseline
+    run_name: 001_baseline
+    tracking_uri: file:${work_dir}/mlruns
+
+
+# 002
+BATCH_SIZE: 2
+USE_CALLBACK: True
