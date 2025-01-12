@@ -1,0 +1,8 @@
+# Wandb
+
+_target_: pytorch_lightning.loggers.WandbLogger
+experiment_name: kaggle_CZII
+tags:
+    stage: train
+tmp: aa
+tracking_uri: file:${work_dir}/mlruns

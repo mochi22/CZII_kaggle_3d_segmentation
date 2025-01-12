@@ -5,10 +5,11 @@ import hydra
 import numpy as np
 import torch
 import warnings
-import mlflow
+import wandb
 import lightning.pytorch as pl
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
-from lightning.pytorch.loggers import MLFlowLogger
+from lightning.pytorch.loggers import WandbLogger
+# from lightning.pytorch.callbacks import WandbCallback
 from pathlib import Path
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig, OmegaConf
@@ -70,9 +71,12 @@ def main(cfg: DictConfig) -> None:
     valid_names = ['TS_6_4']
     train_files = loading_npy(cfg, train_names)
     valid_files = loading_npy(cfg, valid_names)
-    
+
     train_loader = create_dataloader(cfg, train_files)
     valid_loader = create_dataloader(cfg, valid_files, shuffle=False)
+
+    # train_loader = create_dataloader(cfg, train_names, shuffle=True, is_train=True)
+    # valid_loader = create_dataloader(cfg, valid_names, shuffle=True, is_train=True)
 
     # data2=next(iter(train_loader))
     # print("++"*10)
@@ -101,23 +105,33 @@ def main(cfg: DictConfig) -> None:
         main_logger.error("This is no GPU!!!")
 
     # setting MLflow logging
-    mlf_logger = MLFlowLogger(
-        experiment_name=cfg.exp.logger.mlflow.experiment_name,
-        tracking_uri=cfg.exp.logger.mlflow.tracking_uri,
-        run_name=cfg.exp.logger.mlflow.run_name
+    # mlf_logger = MLFlowLogger(
+    #     experiment_name=cfg.exp.logger.mlflow.experiment_name,
+    #     tracking_uri=cfg.exp.logger.mlflow.tracking_uri,
+    #     run_name=cfg.exp.logger.mlflow.run_name
+    # )
+    # mlf_logger.log_hyperparams(cfg)
+    # MLFlowLoggerの代わりに以下を使用
+    wandb_logger = WandbLogger(
+        project=cfg.exp.logger.wandb.experiment_name,
+        name=cfg.exp.logger.wandb.run_name,
+        save_dir=Path(cfg.dir.exp_dir) / f'wandb_logs/{cfg.exp.logger.wandb.run_name}/',
+        log_model=True
     )
-    mlf_logger.log_hyperparams(cfg)
+    wandb_logger.log_hyperparams(cfg)
 
     # mlflow.start_run(run)
-    mlflow.pytorch.autolog()
-    mlflow.set_experiment(cfg.exp.logger.mlflow.experiment_name)
+    # mlflow.pytorch.autolog()
+    # mlflow.set_experiment(cfg.exp.logger.mlflow.experiment_name)
+    # callbacks.append(WandbCallback())
+
 
 
     # setting callbacks
     if cfg.exp.USE_CALLBACK is not None:
         callbacks = [
             ModelCheckpoint(
-                dirpath=Path(cfg.dir.exp_dir) / 'checkpoints',
+                dirpath=Path(cfg.dir.exp_dir) / f'checkpoints/{cfg.exp.logger.wandb.run_name}/',
                 filename='{epoch:02d}-{val_loss:.2f}',
                 save_top_k=3,
                 monitor='val_loss',
@@ -137,7 +151,7 @@ def main(cfg: DictConfig) -> None:
     trainer = pl.Trainer(
         accelerator="gpu",
         max_epochs=cfg.exp.trainer.max_epochs,
-        logger=mlf_logger,
+        logger=wandb_logger,
         callbacks=callbacks, # this makes any errors. https://github.com/huggingface/transformers/issues/3887
         log_every_n_steps=cfg.exp.trainer.log_every_n_steps,
         # val_check_interval=cfg.exp.trainer.val_check_interval,

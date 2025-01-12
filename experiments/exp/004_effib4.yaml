@@ -1,0 +1,26 @@
+defaults:
+  - base@_here_ # ベースの設定ファイルを指定する
+
+seed: 634
+
+logger:
+  wandb:
+    # _override_: ${oc.load:logger/mlflow.yaml} # うまくいかない
+    experiment_name: baseline
+    run_name: 004_effib4
+    # tracking_uri: file:${work_dir}/mlruns
+
+model:
+  name: model25d
+  n_channels: 1
+  n_classes: 7
+  lr: 1e-3
+  arch: 'tf_efficientnet_b4.ns_jft_in1k'
+
+# 002
+BATCH_SIZE: 1
+USE_CALLBACK: True
+IMAGE_SIZE: 630
+
+trainer:
+  max_epochs: 30 # tmp

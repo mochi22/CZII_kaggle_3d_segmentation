@@ -663,3 +663,8 @@ class model25d(pl.LightningModule):
         #     },
         # }
         return torch.optim.AdamW(self.parameters(), lr=self.hparams.lr)
+
+
+
+
+
