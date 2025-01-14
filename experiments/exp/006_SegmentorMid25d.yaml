@@ -1,0 +1,27 @@
+# SegmentorMid25d
+
+defaults:
+  - base@_here_ # ベースの設定ファイルを指定する
+
+seed: 634
+
+logger:
+  wandb:
+    # _override_: ${oc.load:logger/mlflow.yaml} # うまくいかない
+    run_name: 006_SegmentorMid25d
+    # tracking_uri: file:${work_dir}/mlruns
+
+model:
+  name: SegmentorMid25d
+  lr: 1e-3
+  arch: "efficientnet-b4" #'resnet34' # resnet50とかだとg4dn.12xlarge instance で OOM
+
+BATCH_SIZE: 2
+USE_CALLBACK: True
+IMAGE_SIZE: 128 # for train
+STRIDE: 32
+NUM_SLICE: 64
+
+trainer:
+  strategy: 'ddp_find_unused_parameters_true' # or "ddp_spawn"
+  max_epochs: 100

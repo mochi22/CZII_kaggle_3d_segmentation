@@ -1,18 +1,15 @@
-# OOM!!
-
 defaults:
   - base@_here_ # ベースの設定ファイルを指定する
 
 seed: 634
 
 logger:
-  mlflow:
+  wandb:
     # _override_: ${oc.load:logger/mlflow.yaml} # うまくいかない
-    experiment_name: baseline
-    run_name: 001_baseline
-    tracking_uri: file:${work_dir}/mlruns
+    run_name: 003_TverskyLoss
+    # tracking_uri: file:${work_dir}/mlruns
 
 
-# 002
-BATCH_SIZE: 2
+# 003
+BATCH_SIZE: 1
 USE_CALLBACK: True

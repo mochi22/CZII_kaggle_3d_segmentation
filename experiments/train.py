@@ -16,8 +16,8 @@ from omegaconf import DictConfig, OmegaConf
 
 from utilities.seed import set_seed
 from utilities.logger import get_logger
-from src.dataloader import create_dataloader
-from src.model import model2d1d, model25d
+from src.dataloader import create_dataloader, TomogramDataModule
+from src.model import model2d1d, model25d, ProteinSegmentor25D, SegmentorMid25d, UMC
 
 warnings.filterwarnings('ignore')
 
@@ -26,7 +26,8 @@ def loading_npy(cfg, names):
     for name in names:
         image = np.load(f"{cfg.dir.TRAIN_DATA_DIR}/train_image_{name}.npy")
         label = np.load(f"{cfg.dir.TRAIN_DATA_DIR}/train_label_{name}.npy")
-        files.append({"image": image, "label": label})
+        # files.append({"image": image, "label": label})
+        files.append({"filename": name, "image": image, "label": label})
     return files
 
 
@@ -72,24 +73,59 @@ def main(cfg: DictConfig) -> None:
     train_files = loading_npy(cfg, train_names)
     valid_files = loading_npy(cfg, valid_names)
 
-    train_loader = create_dataloader(cfg, train_files)
-    valid_loader = create_dataloader(cfg, valid_files, shuffle=False)
+    ## 0xx系のexperimentsで使う
+    # train_loader = create_dataloader(cfg, train_files, shuffle=True, is_train=True)
+    # valid_loader = create_dataloader(cfg, valid_files, shuffle=True, is_train=True)
 
-    # train_loader = create_dataloader(cfg, train_names, shuffle=True, is_train=True)
-    # valid_loader = create_dataloader(cfg, valid_names, shuffle=True, is_train=True)
+    ## 1xx系のexperimentsで使う
+    # train_loader = create_dataloader(cfg, train_files)
+    # valid_loader = create_dataloader(cfg, valid_files, shuffle=False)
+
+    ## 2xx系
+    data_module = TomogramDataModule(
+        train_files=train_files,
+        val_files=valid_files,
+        batch_size=cfg.exp.BATCH_SIZE,
+        patch_size=cfg.exp.patch_size,
+        overlap=cfg.exp.overlap,
+        num_workers=cfg.exp.NUM_WORKERS,
+        target_size=cfg.exp.target_size
+    )
+
 
     # data2=next(iter(train_loader))
     # print("++"*10)
-    # print(data2["image"].shape, data2["label"].shape)
+    # print(data2["image"].shape, data2["label"].shape) # torch.Size([1, 32, 256, 256]) torch.Size([1, 7, 32, 256, 256])
 
     # modeling
     # model = model2d1d(
-    model = model25d(
+
+    ## 0xx系のexperimentsで使う
+    # model = model25d(
+    #     n_channels=cfg.exp.model.n_channels, 
+    #     n_classes=cfg.exp.model.n_classes,
+    #     lr=cfg.exp.model.lr,
+    #     arch=cfg.exp.model.arch,
+    #     is_train=True
+    # )
+
+    # model=SegmentorMid25d(
+    #     n_channels=cfg.exp.model.n_channels, 
+    #     n_classes=cfg.exp.model.n_classes,
+    #     lr=cfg.exp.model.lr,
+    #     arch=cfg.exp.model.arch,
+    #     is_train=True,
+    #     n_frames=cfg.exp.NUM_SLICE
+    # )
+
+    ## 1xx系のexperimentsで使う
+    # model = ProteinSegmentor25D(in_ch=cfg.exp.model.n_channels, out_ch=cfg.exp.model.n_classes, frames_per_group=1, lr=cfg.exp.model.lr)
+
+    ## 2xx
+    model = UMC(
         n_channels=cfg.exp.model.n_channels, 
         n_classes=cfg.exp.model.n_classes,
         lr=cfg.exp.model.lr,
-        arch=cfg.exp.model.arch,
-        is_train=True
     )
 
     torch.set_float32_matmul_precision('medium')
@@ -134,11 +170,13 @@ def main(cfg: DictConfig) -> None:
                 dirpath=Path(cfg.dir.exp_dir) / f'checkpoints/{cfg.exp.logger.wandb.run_name}/',
                 filename='{epoch:02d}-{val_loss:.2f}',
                 save_top_k=3,
-                monitor='val_loss',
+                # monitor='val_loss',
+                monitor='val_total_loss',
                 mode='min'
             ),
             EarlyStopping(
-                monitor='val_loss',
+                # monitor='val_loss',
+                monitor='val_total_loss',
                 patience=cfg.exp.trainer.patience,
                 mode='min'
             ),
@@ -165,7 +203,10 @@ def main(cfg: DictConfig) -> None:
 
     # Train
     main_logger.info("Starting model training")
-    trainer.fit(model, train_loader, valid_loader)
+    # trainer.fit(model, train_loader, valid_loader)
+
+    ## 2xx
+    trainer.fit(model, data_module)
     main_logger.info("done model training")
 
 

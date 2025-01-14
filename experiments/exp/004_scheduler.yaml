@@ -6,21 +6,8 @@ seed: 634
 logger:
   wandb:
     # _override_: ${oc.load:logger/mlflow.yaml} # うまくいかない
-    experiment_name: baseline
-    run_name: 003_resnet18d
+    run_name: 004_scheduler
     # tracking_uri: file:${work_dir}/mlruns
 
-model:
-  name: model25d
-  n_channels: 1
-  n_classes: 7
-  lr: 1e-3
-  arch: 'resnet18d'
-
-# 002
 BATCH_SIZE: 1
 USE_CALLBACK: True
-IMAGE_SIZE: 640
-
-trainer:
-  max_epochs: 30 # tmp

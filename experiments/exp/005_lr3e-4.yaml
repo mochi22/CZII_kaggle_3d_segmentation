@@ -3,16 +3,16 @@ defaults:
 
 seed: 634
 
-
 logger:
   wandb:
     # _override_: ${oc.load:logger/mlflow.yaml} # うまくいかない
-    experiment_name: CZII
-    run_name: 001_baseline
-    tracking_uri: file:${work_dir}/mlruns
+    run_name: 005_lr3e-4
+    # tracking_uri: file:${work_dir}/mlruns
 
+model:
+  name: model25d
+  lr: 3e-4 #1e-3
+
+BATCH_SIZE: 1
 USE_CALLBACK: True
-
-trainer:
-  max_epochs: 30 # tmp
-
+IMAGE_SIZE: 256 # for train

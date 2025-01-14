@@ -2,7 +2,7 @@ seed: 22
 # SUB_DIMENTION: 16 # 32 # 64 # 96
 STRIDE: 16
 NUM_SLICE: 32
-IMAGE_SIZE: 512 #640 # 元の画像サイズ630だと、unetのデコードとskipコネクション間でサイズ違いで面倒なので、実験の簡素化のためのリサイズ。。
+IMAGE_SIZE: 512 #630 # 元の画像サイズ630だと、unetのデコードとskipコネクション間でサイズ違いで面倒なので、実験の簡素化のためのリサイズ。。
 NUM_WORKERS: 4
 BATCH_SIZE: 1
 PRETRAIN: True
@@ -23,8 +23,15 @@ model:
   lr: 1e-3
   arch: 'resnet34d'
 
+logger:
+  wandb:
+    # _override_: ${oc.load:logger/mlflow.yaml} # うまくいかない
+    experiment_name: CZII
+    run_name: 001_baseline
+    tracking_uri: file:${work_dir}/mlruns
+
 trainer:
-  max_epochs: 100
+  max_epochs: 30 #100
   log_every_n_steps: 100 # default: 50
   val_check_interval: 1.0
   gpus: 4

@@ -1,5 +1,9 @@
 import torch
 from torch.utils.data import Dataset
+import numpy as np
+import torch.nn.functional as F
+import warnings
+warnings.simplefilter('ignore')
 
 class SlicedVolumeDataset(Dataset):
     def __init__(self, data_files, num_slices=64, stride=32, transform=None):
@@ -28,6 +32,11 @@ class SlicedVolumeDataset(Dataset):
         # ボリュームとラベルの取得
         volume = self.data_files[data_idx]['image']
         label = self.data_files[data_idx]['label']
+
+        # 正規化
+        max_val = volume.max()
+        min_val = volume.min()
+        volume = (volume - min_val) / (max_val - min_val)
         
         # スライスの抽出
         vol_slice = volume[start_slice:start_slice + self.num_slices]
@@ -40,17 +49,87 @@ class SlicedVolumeDataset(Dataset):
                 'label': label_slice
             }
             data = self.transform(data)
-            # vol_slice = self.transform(vol_slice)
-            # label_slice = self.transform(label_slice)
-            return data
+            vol_slice = data["image"] # torch.Size([32, 512, 512]) #self.transform(vol_slice)
+            label_slice = data["label"] # torch.Size([32, 512, 512]) #self.transform(label_slice)
+
+        # ラベルをTensorに変換
+        label_tensor = label_slice.long() #torch.from_numpy(label_slice).long()
         
+        # one-hotエンコーディングに変換
+        num_classes = 7  # 0から6までのクラス
+        one_hot_label = F.one_hot(label_tensor, num_classes=num_classes)
+        # (D, H, W, C) -> (C, D, H, W)
+        one_hot_label = one_hot_label.permute(3, 0, 1, 2)
+
         return {
-            'image': torch.from_numpy(vol_slice).float(),
-            'label': torch.from_numpy(label_slice).long(),
+            'image': vol_slice.float(), #torch.from_numpy(vol_slice).float(),
+            'label': one_hot_label,
             'start_slice': start_slice,
             'volume_idx': data_idx
         }
 
+
+class ProteinSegmentationDataset(Dataset):
+    def __init__(self, data_list, transform=None, inference_mode=False):
+        self.data_list = data_list
+        self.transform = transform
+        self.inference_mode=inference_mode
+
+    def __len__(self):
+        return len(self.data_list)
+
+    def __getitem__(self, idx):
+        data = self.data_list[idx]
+        # image = torch.from_numpy(data['image']).float()
+        # label = torch.from_numpy(data['label']).long()
+        image = data['image']
+        label = data['label']
+
+        # 画像の正規化
+        max_val = image.max()
+        min_val = image.min()
+        image = (image - min_val) / (max_val - min_val)
+        
+        # if self.transform:
+        #     image = self.transform(image)
+        
+        # if self.transform:
+        #     transformed = self.transform(volume=image, mask3d=label)
+        #     image = transformed["volume"]
+        #     label = transformed["mask3d"]
+
+        # print(image.shape, label.shape)
+
+        if self.transform:
+            transformed_slices = []
+            transformed_labels = [] if not self.inference_mode else None
+            
+            for i in range(image.shape[0]):  # Iterate over depth
+                if self.inference_mode:
+                    transformed = self.transform(image=image[i])
+                    transformed_slices.append(transformed['image'])
+                else:
+                    transformed = self.transform(image=image[i], mask=label[i])
+                    transformed_slices.append(transformed['image'])
+                    transformed_labels.append(transformed['mask'])
+            
+            image = np.stack(transformed_slices, axis=0)
+            if not self.inference_mode:
+                label = np.stack(transformed_labels, axis=0)
+
+
+        # チャンネル次元を追加 (184, 630, 630) -> (1, 184, 630, 630)
+        # image = image.unsqueeze(0)
+        if image.ndim == 3:
+            image = np.expand_dims(image, axis=0)
+
+        print(image.shape, label.shape)
+
+        return {
+            'filename': data['filename'],
+            'image': torch.from_numpy(image).float(),
+            'label': torch.from_numpy(label).long() if not self.inference_mode else None
+        }
 
 
 # import pandas as pd
@@ -264,3 +343,218 @@ class SlicedVolumeDataset(Dataset):
 #                 'volume_idx': data_idx,
 #                 'id': id
 #             }
+
+
+## 2xx  3dCNN用のやつ
+from scipy.ndimage import zoom
+# class TomogramDataset(Dataset):
+#     def __init__(self, files, patch_size=64, overlap=0.75, augment=True):
+#         """
+#         Args:
+#             files: リストof辞書 [{"filename": name, "image": image, "label": label}, ...]
+#             patch_size: パッチのサイズ
+#             overlap: オーバーラップの割合
+#             augment: データ拡張を行うかどうか
+#         """
+#         self.files = files
+#         self.patch_size = patch_size
+#         self.overlap = overlap
+#         self.augment = augment
+#         self.patches = self._create_patches()
+
+#     def _create_patches(self):
+#         patches = []
+#         step_size = int(self.patch_size * (1 - self.overlap))
+        
+#         for file_data in self.files:
+#             tomogram = file_data["image"]
+#             label = file_data["label"]
+#             filename = file_data["filename"]
+            
+#             depth, height, width = tomogram.shape
+            
+#             # 各次元でのパッチ数を計算
+#             z_steps = max(1, int(np.ceil((depth - self.patch_size) / step_size)) + 1)
+#             y_steps = max(1, int(np.ceil((height - self.patch_size) / step_size)) + 1)
+#             x_steps = max(1, int(np.ceil((width - self.patch_size) / step_size)) + 1)
+            
+#             for z_idx in range(z_steps):
+#                 z_start = min(z_idx * step_size, depth - self.patch_size)
+                
+#                 for y_idx in range(y_steps):
+#                     y_start = min(y_idx * step_size, height - self.patch_size)
+                    
+#                     for x_idx in range(x_steps):
+#                         x_start = min(x_idx * step_size, width - self.patch_size)
+                        
+#                         # パッチの切り出し
+#                         patch = tomogram[
+#                             z_start:z_start + self.patch_size,
+#                             y_start:y_start + self.patch_size,
+#                             x_start:x_start + self.patch_size
+#                         ]
+                        
+#                         label_patch = label[
+#                             z_start:z_start + self.patch_size,
+#                             y_start:y_start + self.patch_size,
+#                             x_start:x_start + self.patch_size
+#                         ]
+                        
+#                         # パッチのサイズが正しいことを確認
+#                         if patch.shape == (self.patch_size, self.patch_size, self.patch_size):
+#                             patches.append({
+#                                 'data': patch,
+#                                 'label': label_patch,
+#                                 'position': (z_start, y_start, x_start),
+#                                 'filename': filename
+#                             })
+        
+#         return patches
+
+#     def __len__(self):
+#         return len(self.patches)
+
+#     def __getitem__(self, idx):
+#         patch_info = self.patches[idx]
+#         patch = patch_info['data']
+#         label_patch = patch_info['label']
+        
+#         if self.augment and np.random.rand() > 0.5:
+#             patch = np.flip(patch, axis=2)  # 水平フリップ
+#             label_patch = np.flip(label_patch, axis=2)
+        
+#         # チャンネル次元を追加し、適切なデータ型に変換
+#         patch_tensor = torch.from_numpy(patch.copy()).float().unsqueeze(0)
+#         label_tensor = torch.from_numpy(label_patch.copy()).long()
+        
+#         return {
+#             'data': patch_tensor,
+#             'label': label_tensor,
+#             'position': patch_info['position'],
+#             'filename': patch_info['filename']
+#         }
+import ast
+from typing import Tuple, Any
+def parse_tuple_str(tuple_str: str) -> Tuple[Any, ...]:
+    """文字列形式のtupleを実際のtupleに変換する"""
+    try:
+        return ast.literal_eval(tuple_str)
+    except (ValueError, SyntaxError):
+        raise ValueError(f"Invalid tuple string format: {tuple_str}")
+
+class TomogramDataset(Dataset):
+    def __init__(self, files, patch_size=64, overlap=0.75, target_size=(184, 128, 128), augment=True):
+        """
+        Args:
+            files: リストof辞書 [{"filename": name, "image": image, "label": label}, ...]
+            patch_size: パッチのサイズ
+            overlap: オーバーラップの割合
+            target_size: リサイズ後のサイズ (D, H, W)
+            augment: データ拡張を行うかどうか
+        """
+        self.files = files
+        self.patch_size = patch_size
+        self.overlap = overlap
+        self.target_size = parse_tuple_str(target_size) if isinstance(target_size, str) else target_size # Hydraから読み込まれる際は文字列になるのでparse
+        self.augment = augment
+        self.patches = self._create_patches()
+
+    def _resize_volume(self, volume, is_label=False):
+        """ボリュームをtarget_sizeにリサイズする"""
+        current_size = volume.shape
+        factors = (
+            self.target_size[0] / current_size[0],
+            self.target_size[1] / current_size[1],
+            self.target_size[2] / current_size[2]
+        )
+        
+        if is_label:
+            # ラベルの場合は最近傍補間を使用
+            return zoom(volume, factors, order=0)
+        else:
+            # 画像の場合は3次スプライン補間を使用
+            return zoom(volume, factors, order=3)
+
+    def _create_patches(self):
+        patches = []
+        step_size = int(self.patch_size * (1 - self.overlap))
+        
+        for file_data in self.files:
+            # データのリサイズ
+            tomogram = self._resize_volume(file_data["image"])
+            label = self._resize_volume(file_data["label"], is_label=True)
+            filename = file_data["filename"]
+            
+            depth, height, width = tomogram.shape
+            
+            # 各次元でのパッチ数を計算
+            z_steps = max(1, int(np.ceil((depth - self.patch_size) / step_size)) + 1)
+            y_steps = max(1, int(np.ceil((height - self.patch_size) / step_size)) + 1)
+            x_steps = max(1, int(np.ceil((width - self.patch_size) / step_size)) + 1)
+            
+            for z_idx in range(z_steps):
+                z_start = min(z_idx * step_size, depth - self.patch_size)
+                
+                for y_idx in range(y_steps):
+                    y_start = min(y_idx * step_size, height - self.patch_size)
+                    
+                    for x_idx in range(x_steps):
+                        x_start = min(x_idx * step_size, width - self.patch_size)
+                        
+                        # パッチの切り出し
+                        patch = tomogram[
+                            z_start:z_start + self.patch_size,
+                            y_start:y_start + self.patch_size,
+                            x_start:x_start + self.patch_size
+                        ]
+                        
+                        label_patch = label[
+                            z_start:z_start + self.patch_size,
+                            y_start:y_start + self.patch_size,
+                            x_start:x_start + self.patch_size
+                        ]
+                        
+                        # パッチのサイズが正しいことを確認
+                        if patch.shape == (self.patch_size, self.patch_size, self.patch_size):
+                            # 原画像でのパッチ位置を計算
+                            original_z = int(z_start * (630 / self.target_size[1]))
+                            original_y = int(y_start * (630 / self.target_size[1]))
+                            original_x = int(x_start * (630 / self.target_size[2]))
+                            
+                            patches.append({
+                                'data': patch,
+                                'label': label_patch,
+                                'position': (z_start, y_start, x_start),
+                                'original_position': (original_z, original_y, original_x),
+                                'filename': filename
+                            })
+        
+        return patches
+
+    def __len__(self):
+        return len(self.patches)
+
+    def __getitem__(self, idx):
+        patch_info = self.patches[idx]
+        patch = patch_info['data']
+        label_patch = patch_info['label']
+        
+        if self.augment:
+            # データ拡張
+            if np.random.rand() > 0.5:
+                patch = np.flip(patch, axis=2)  # 水平フリップ
+                label_patch = np.flip(label_patch, axis=2)
+            
+            # 必要に応じて他のデータ拡張を追加
+            
+        # チャンネル次元を追加し、適切なデータ型に変換
+        patch_tensor = torch.from_numpy(patch.copy()).float().unsqueeze(0)
+        label_tensor = torch.from_numpy(label_patch.copy()).long()
+        
+        return {
+            'data': patch_tensor,
+            'label': label_tensor,
+            'position': patch_info['position'],
+            'original_position': patch_info['original_position'],
+            'filename': patch_info['filename']
+        }

@@ -11,7 +11,8 @@ RUN python3 -m pip install --upgrade pip \
     lightning \
     monai \
     copick \
-    connected-components-3d
+    connected-components-3d \
+    segmentation_models_pytorch
 
 # using hydra and mlflow for managin experiments
 RUN pip install --no-cache-dir \
