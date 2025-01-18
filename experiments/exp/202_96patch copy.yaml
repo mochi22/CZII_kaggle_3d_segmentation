@@ -5,11 +5,11 @@ seed: 634
 
 logger:
   wandb:
-    run_name: 201_3dcnnbase
+    run_name: 202_96patch
 
-# 201
+
 BATCH_SIZE: 2
 USE_CALLBACK: True
 target_size: (184, 128, 128)
 overlap: 0.75
-patch_size: 64
+patch_size: 96 # <-201との違いはここだけ

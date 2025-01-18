@@ -1,0 +1,16 @@
+defaults:
+  - base_2xx@_here_ # ベース2xx
+
+seed: 634
+
+logger:
+  wandb:
+    run_name: 206_3dflip
+
+## 元々,50%の確率でdim=2でflip only
+# 下記3dでランダムな回転角で回転するaugを追加
+
+            # for axis in [1, 2, 3]:  # D, H, W軸でのフリップ
+            #     if np.random.rand() < 0.5:
+            #         data_np = np.flip(data_np, axis=axis)
+            #         label_np = np.flip(label_np, axis=axis)

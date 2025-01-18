@@ -442,6 +442,8 @@ def parse_tuple_str(tuple_str: str) -> Tuple[Any, ...]:
     except (ValueError, SyntaxError):
         raise ValueError(f"Invalid tuple string format: {tuple_str}")
 
+from scipy.ndimage import rotate
+
 class TomogramDataset(Dataset):
     def __init__(self, files, patch_size=64, overlap=0.75, target_size=(184, 128, 128), augment=True):
         """
@@ -458,6 +460,7 @@ class TomogramDataset(Dataset):
         self.target_size = parse_tuple_str(target_size) if isinstance(target_size, str) else target_size # Hydraから読み込まれる際は文字列になるのでparse
         self.augment = augment
         self.patches = self._create_patches()
+        self.rotation_range=360 # 回転の最大角度
 
     def _resize_volume(self, volume, is_label=False):
         """ボリュームをtarget_sizeにリサイズする"""
@@ -534,6 +537,14 @@ class TomogramDataset(Dataset):
     def __len__(self):
         return len(self.patches)
 
+    def _rotate_3d(self, volume, angle_x, angle_y, angle_z):
+        """3D回転を実行"""
+        print("11"*10)
+        volume = rotate(volume, angle_x, axes=(1, 2), reshape=False)
+        volume = rotate(volume, angle_y, axes=(0, 2), reshape=False)
+        volume = rotate(volume, angle_z, axes=(0, 1), reshape=False)
+        return volume
+
     def __getitem__(self, idx):
         patch_info = self.patches[idx]
         patch = patch_info['data']
@@ -541,12 +552,42 @@ class TomogramDataset(Dataset):
         
         if self.augment:
             # データ拡張
-            if np.random.rand() > 0.5:
-                patch = np.flip(patch, axis=2)  # 水平フリップ
-                label_patch = np.flip(label_patch, axis=2)
+
+            # # ## 水平フリップ
+            # if np.random.rand() > 0.5:
+            #     patch = np.flip(patch, axis=2)  
+            #     label_patch = np.flip(label_patch, axis=2)
             
             # 必要に応じて他のデータ拡張を追加
-            
+            # # # 1. ランダム回転（3D）
+            # if np.random.rand() < 0.5:
+            #     angle_x = np.random.uniform(-self.rotation_range, self.rotation_range)
+            #     angle_y = np.random.uniform(-self.rotation_range, self.rotation_range)
+            #     angle_z = np.random.uniform(-self.rotation_range, self.rotation_range)
+
+            #     patch = self._rotate_3d(patch, angle_x, angle_y, angle_z)
+            #     label_patch = self._rotate_3d(label_patch, angle_x, angle_y, angle_z)
+
+            # # 2. ランダムフリップ
+            for axis in range(3):  # D, H, W軸でのフリップ
+                if np.random.rand() < 0.5:
+                    patch = np.flip(patch, axis=axis)
+                    label_patch = np.flip(label_patch, axis=axis)
+
+            # # 3. 弾性変形
+            # if np.random.rand() < 0.5:
+            #     [data_np], [label_np] = elasticdeform.deform_random_grid(
+            #         [data_np, label_np],
+            #         sigma=self.elastic_deform_sigma,
+            #         points=self.elastic_deform_points,
+            #         order=[3, 0]  # データは3次補間、ラベルは最近傍補間
+            #     )
+
+            # # 4. ガウシアンノイズ（データのみ）
+            # if np.random.rand() < 0.5:
+            #     noise = np.random.normal(0, self.noise_std, data_np.shape)
+            #     data_np = data_np + noise
+
         # チャンネル次元を追加し、適切なデータ型に変換
         patch_tensor = torch.from_numpy(patch.copy()).float().unsqueeze(0)
         label_tensor = torch.from_numpy(label_patch.copy()).long()

@@ -5,22 +5,11 @@ seed: 634
 
 logger:
   wandb:
-    run_name: 201_3dcnnbase
+    run_name: 203_weightloss
 
-model:
-  name: UMC
-  n_channels: 1
-  n_classes: 7
-  n_frames: 184
-  lr: 1e-3
-  arch: 'tf_efficientnet_b4.ns_jft_in1k'
-
-# 002
+## 201と同じ
 BATCH_SIZE: 2
 USE_CALLBACK: True
 target_size: (184, 128, 128)
 overlap: 0.75
 patch_size: 64
-
-trainer:
-  max_epochs: 30 # tmp

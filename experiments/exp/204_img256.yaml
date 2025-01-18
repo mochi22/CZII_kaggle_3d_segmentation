@@ -5,11 +5,11 @@ seed: 634
 
 logger:
   wandb:
-    run_name: 201_3dcnnbase
+    run_name: 204_img256
 
-# 201
+## lossは203から201に戻した
 BATCH_SIZE: 2
 USE_CALLBACK: True
-target_size: (184, 128, 128)
+target_size: (184, 256, 256) # ここ変えた.512だとOOM
 overlap: 0.75
 patch_size: 64

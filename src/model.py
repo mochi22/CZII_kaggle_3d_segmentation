@@ -1540,18 +1540,21 @@ def get_size_group(radius):
     else:
         return 'large'
 
+import pandas as pd
 # カスタムメトリクスの定義
 class CryoETMetrics(Metric):
-    def __init__(self, distance_threshold=5.0, num_classes=7):
+    def __init__(self, distance_threshold=5.0, num_classes=7, beta=4):
         super().__init__()
         self.distance_threshold = distance_threshold
         self.num_classes = num_classes
+        self.beta = beta
         # self.device="cuda"
         
         # メトリクス用のstate追加（デバイスを指定）
         self.add_state("tp", default=torch.zeros(num_classes, device=self.device), dist_reduce_fx="sum")
         self.add_state("fp", default=torch.zeros(num_classes, device=self.device), dist_reduce_fx="sum")
         self.add_state("fn", default=torch.zeros(num_classes, device=self.device), dist_reduce_fx="sum")
+        self.add_state("tn", default=torch.zeros(num_classes, device=self.device), dist_reduce_fx="sum")
         self.add_state("total_distance", default=torch.tensor(0.0, device=self.device), dist_reduce_fx="sum")
         self.add_state("valid_distance_count", default=torch.tensor(0, device=self.device), dist_reduce_fx="sum")
         self.add_state("pred_labels", default=torch.tensor([], device=self.device), dist_reduce_fx="cat")
@@ -1563,6 +1566,7 @@ class CryoETMetrics(Metric):
         self.tp = self.tp.to(device)
         self.fp = self.fp.to(device)
         self.fn = self.fn.to(device)
+        self.tn = self.tn.to(device)
         
         # 予測とターゲットの処理
         pred_labels = preds.argmax(dim=1)
@@ -1592,16 +1596,21 @@ class CryoETMetrics(Metric):
             self.tp[i] += torch.logical_and(pred_mask, true_mask).sum()
             self.fp[i] += torch.logical_and(pred_mask, ~true_mask).sum()
             self.fn[i] += torch.logical_and(~pred_mask, true_mask).sum()
+            self.tn[i] += torch.logical_and(~pred_mask, ~true_mask).sum()
 
     def compute(self):
         # 全ての計算をCPUで行う
         tp = self.tp.cpu()
         fp = self.fp.cpu()
         fn = self.fn.cpu()
+        tn = self.tn.cpu()
         
         precision = tp / (tp + fp + 1e-7)
         recall = tp / (tp + fn + 1e-7)
-        f1 = 2 * (precision * recall) / (precision + recall + 1e-7)
+        # f1 = 2 * (precision * recall) / (precision + recall + 1e-7)
+
+        f_score = ((1 + self.beta**2) * precision * recall) / ((self.beta**2 * precision) + recall + 1e-7)
+        
         
         # サイズグループごとのメトリクス
         size_groups = {'small': [], 'medium': [], 'large': []}
@@ -1618,13 +1627,59 @@ class CryoETMetrics(Metric):
                 
                 group_precision = group_tp / (group_tp + group_fp + 1e-7)
                 group_recall = group_tp / (group_tp + group_fn + 1e-7)
-                group_f1 = 2 * (group_precision * group_recall) / (group_precision + group_recall + 1e-7)
+                # group_f1 = 2 * (group_precision * group_recall) / (group_precision + group_recall + 1e-7)
+                group_f1_score = ((1 + self.beta**2) * group_precision * group_recall) / ((self.beta**2 * group_precision) + group_recall + 1e-7)
                 
                 size_metrics[group] = {
                     'precision': group_precision,
                     'recall': group_recall,
-                    'f1': group_f1
+                    f'f{self.beta}': group_f1_score
                 }
+
+        # それぞれのTPなどを算出してログに出力(wandbだと流石に数が多すぎるのでログにdfとして出力)
+        metrics_dict = {
+            'Protein': [PROTEINS[i]['name'] for i in range(self.num_classes)],
+            'TP': tp,
+            'FP': fp,
+            'TN': tn,
+            'FN': fn,
+            'Precision': precision,
+            'Recall': recall,
+            # 'Specificity': specificity,
+            f'F{self.beta}': f_score,
+            # 'Accuracy': accuracy
+        }
+        df = pd.DataFrame(metrics_dict)
+        # サイズグループの追加
+        df['Size'] = df['Protein'].apply(
+            lambda x: 'background' if x == 'background' else 
+            get_size_group(PROTEINS[list(PROTEINS.keys())[list(map(lambda p: p['name'], PROTEINS.values())).index(x)]]['radius'])
+        )
+
+        # 重みの定義（タンパク質ごと）
+        # 0102121
+        weights = {
+            'background': 0.0,  # 背景は無視
+            'apo-ferritin': 1.0,
+            'beta-amylase': 0.0,
+            'beta-galactosidase': 2.0,
+            'ribosome': 1.0,
+            'thyroglobulin': 2.0,
+            'virus-like-particle': 1.0
+        }
+        
+        # DataFrameに重みの列を追加
+        df['Weight'] = df['Protein'].map(weights)
+        
+        # 背景を除外してF-scoreの重み付き平均を計算
+        weighted_f_score = np.average(
+            df[df['Protein'] != 'background'][f'F{self.beta}'],
+            weights=df[df['Protein'] != 'background']['Weight']
+        )
+
+        print("##"*10)
+        print(f"metric df:{df}")
+        print(f"Weighted F{self.beta} Score: {weighted_f_score:.4f}")
 
         # 距離ベースのメトリクス
         avg_distance = torch.tensor(0.0)
@@ -1635,10 +1690,12 @@ class CryoETMetrics(Metric):
             'class_metrics': {
                 'precision': precision,
                 'recall': recall,
-                'f1': f1
+                f'f{self.beta}': f_score
             },
+            'beta': self.beta,
             'size_metrics': size_metrics,
-            'avg_distance': avg_distance
+            'avg_distance': avg_distance,
+            'weighted_f_score': weighted_f_score
         }
 
 
@@ -1649,7 +1706,7 @@ class UMC(pl.LightningModule):
 
         # メトリクスの初期化
         # self.train_metrics = CryoETMetrics()
-        self.val_metrics = CryoETMetrics()
+        self.val_metrics = CryoETMetrics(beta=4)
         
         # エンコーダー
         self.inc = DoubleConv(n_channels, 16)
@@ -1714,6 +1771,54 @@ class UMC(pl.LightningModule):
         
         loss = 1 - torch.mean(numerator / denominator)
         return loss
+    # def tversky_loss(self, pred, target, weights=[0,1,0,2,1,2,1]):
+    #     """
+    #     Weighted Tversky損失関数（one-hot形式の入力に対応）
+        
+    #     Args:
+    #         pred: モデルの予測 (B, C, D, H, W) - すでにsoftmax適用済み
+    #         target: 正解ラベル (B, C, D, H, W) - one-hot形式
+    #         weights: クラスごとの重み。Noneの場合は背景を0、他を1に設定
+    #     """
+        
+    #     pred = torch.softmax(pred, dim=1)
+
+    #     # one-hotエンコーディング
+    #     target = F.one_hot(target, num_classes=pred.shape[1])
+    #     target = target.permute(0, 4, 1, 2, 3)
+
+    #     # check input shape
+    #     assert pred.shape == target.shape, f"Prediction shape {pred.shape} must match target shape {target.shape}"
+        
+    #     # デフォルトのweights設定（背景を除外）
+    #     if weights is None:
+    #         weights = torch.ones(pred.shape[1], device=pred.device)
+    #         weights[0] = 0  # 背景クラスの重みを0に設定
+    #     else:
+    #         weights = torch.tensor(weights, device=pred.device)
+        
+    #     # クラスごとの計算
+    #     total_loss = 0
+    #     total_weights = 0
+        
+    #     for i in range(pred.shape[1]):  # クラス数でループ
+    #         if weights[i] > 0:  # 重みが0より大きいクラスのみ計算
+    #             # そのクラスに対する計算
+    #             tp = torch.sum(pred[:, i] * target[:, i], dim=(1, 2, 3))
+    #             fp = torch.sum(pred[:, i] * (1 - target[:, i]), dim=(1, 2, 3))
+    #             fn = torch.sum((1 - pred[:, i]) * target[:, i], dim=(1, 2, 3))
+                
+    #             numerator = tp + 1e-7
+    #             denominator = tp + self.hparams.alpha * fp + self.hparams.beta * fn + 1e-7
+                
+    #             loss = 1 - (numerator / denominator)
+    #             total_loss += weights[i] * torch.mean(loss)
+    #             total_weights += weights[i]
+        
+    #     # 重み付き平均の計算
+    #     if total_weights > 0:
+    #         return total_loss / total_weights
+    #     return total_loss
 
     def training_step(self, batch, batch_idx):
         inputs = batch['data']
@@ -1761,14 +1866,16 @@ class UMC(pl.LightningModule):
     def on_validation_epoch_end(self):
         # メトリクスのログ
         metrics = self.val_metrics.compute()
+        beta = metrics['beta']
         for class_idx in range(self.hparams.n_classes):
             protein_name = PROTEINS[class_idx]['name']
-            self.log(f'val_{protein_name}_f1', metrics['class_metrics']['f1'][class_idx])
+            self.log(f'val_{protein_name}_f1', metrics['class_metrics'][f'f{beta}'][class_idx])
         
         for group, group_metrics in metrics['size_metrics'].items():
-            self.log(f'val_{group}_f1', group_metrics['f1'])
+            self.log(f'val_{group}_f1', group_metrics[f'f{beta}'])
         
         self.log('val_avg_distance', metrics['avg_distance'])
+        self.log('weighted_f_score', metrics['weighted_f_score'])
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)

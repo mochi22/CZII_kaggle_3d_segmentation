@@ -1,0 +1,19 @@
+defaults:
+  - base_2xx@_here_ # ベース2xx
+
+seed: 634
+
+logger:
+  wandb:
+    run_name: 208_img256batch2
+
+## aug加えた場合のスコア確認
+# target_size: (184, 256, 256) # ここ変えた.512だとOOM
+BATCH_SIZE: 1
+model:
+  name: UMC
+  n_channels: 1
+  n_classes: 7
+  n_frames: 184
+  lr: 1e-3
+  arch: 'tf_efficientnet_b4.ns_jft_in1k'

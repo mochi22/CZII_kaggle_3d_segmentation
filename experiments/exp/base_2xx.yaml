@@ -4,8 +4,15 @@ STRIDE: 16
 NUM_SLICE: 32
 IMAGE_SIZE: 512 #630 # 元の画像サイズ630だと、unetのデコードとskipコネクション間でサイズ違いで面倒なので、実験の簡素化のためのリサイズ。。
 NUM_WORKERS: 4
-BATCH_SIZE: 1
+
 PRETRAIN: True
+
+BATCH_SIZE: 2
+USE_CALLBACK: True
+target_size: (184, 128, 128)
+overlap: 0.75
+patch_size: 64
+
 
 # id_to_name = {
 #               0: "background", 0
@@ -49,13 +56,4 @@ model:
   n_classes: 7
   n_frames: 184
   lr: 1e-3
-  arch: 'tf_efficientnet_b4.ns_jft_in1k'
-
-
-# list の書き方
-# my_struct:
-#   list_field: 
-#     - item1
-#     - item2
-#     - item3
-
+  # arch: 'tf_efficientnet_b4.ns_jft_in1k'

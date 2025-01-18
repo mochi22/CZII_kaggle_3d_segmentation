@@ -1,0 +1,10 @@
+defaults:
+  - base_2xx@_here_ # ベース2xx
+
+seed: 634
+
+logger:
+  wandb:
+    run_name: 205_noaug
+
+## 元々はdim=2で50%の確率でflipだけしていた。

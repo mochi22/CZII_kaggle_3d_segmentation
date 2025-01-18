@@ -1,0 +1,12 @@
+defaults:
+  - base_2xx@_here_ # ベース2xx
+
+seed: 634
+
+logger:
+  wandb:
+    run_name: 207_img256
+
+## aug加えた場合のスコア確認
+target_size: (184, 256, 256) # ここ変えた.512だとOOM
+BATCH_SIZE: 1 #OOM対策
